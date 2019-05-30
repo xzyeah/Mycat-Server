@@ -1,5 +1,11 @@
 package io.mycat.backend.postgresql.utils;
 
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.TimeZone;
+
 import io.mycat.backend.postgresql.packet.AuthenticationPacket;
 import io.mycat.backend.postgresql.packet.BackendKeyData;
 import io.mycat.backend.postgresql.packet.CommandComplete;
@@ -14,12 +20,6 @@ import io.mycat.backend.postgresql.packet.ParseComplete;
 import io.mycat.backend.postgresql.packet.PostgreSQLPacket;
 import io.mycat.backend.postgresql.packet.ReadyForQuery;
 import io.mycat.backend.postgresql.packet.RowDescription;
-
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.TimeZone;
 
 public class PacketUtils {
 
@@ -84,7 +84,7 @@ public class PacketUtils {
 	}
 	
 	@Deprecated
-	public static List<PostgreSQLPacket> parsePacket(byte[] bytes, int offset,
+	private static List<PostgreSQLPacket> parsePacket(byte[] bytes, int offset,
 			int readLength) throws IOException {
 		List<PostgreSQLPacket> pgs = new ArrayList<>();
 		while (offset < readLength) {
@@ -182,8 +182,9 @@ public class PacketUtils {
 		String[][] params = paramList.toArray(new String[0][]);
 		StringBuilder details = new StringBuilder();
 		for (int i = 0; i < params.length; ++i) {
-			if (i != 0)
+			if (i != 0) {
 				details.append(", ");
+			}
 			details.append(params[i][0]);
 			details.append("=");
 			details.append(params[i][1]);

@@ -39,6 +39,9 @@ public class NIOSocketWR extends SocketWR {
 		}
 
 		try {
+			if(!channel.isOpen()){
+				AbstractConnection.LOGGER.debug("caught err: {}", con);
+			}
 			boolean noMoreData = write0();
 			writing.set(false);
 			if (noMoreData && con.writeQueue.isEmpty()) {
@@ -58,6 +61,8 @@ public class NIOSocketWR extends SocketWR {
 				AbstractConnection.LOGGER.debug("caught err:", e);
 			}
 			con.close("err:" + e);
+		} finally {
+			writing.set(false);
 		}
 
 	}
@@ -94,16 +99,22 @@ public class NIOSocketWR extends SocketWR {
 			}
 
 			buffer.flip();
-			while (buffer.hasRemaining()) {
-				written = channel.write(buffer);
-				if (written > 0) {
-					con.lastWriteTime = TimeUtil.currentTimeMillis();
-					con.netOutBytes += written;
-					con.processor.addNetOutBytes(written);
-					con.lastWriteTime = TimeUtil.currentTimeMillis();
-				} else {
-					break;
+			try {
+				while (buffer.hasRemaining()) {
+					written = channel.write(buffer);// java.io.IOException:
+									// Connection reset by peer
+					if (written > 0) {
+						con.lastWriteTime = TimeUtil.currentTimeMillis();
+						con.netOutBytes += written;
+						con.processor.addNetOutBytes(written);
+						con.lastWriteTime = TimeUtil.currentTimeMillis();
+					} else {
+						break;
+					}
 				}
+			} catch (IOException e) {
+				con.recycle(buffer);
+				throw e;
 			}
 			if (buffer.hasRemaining()) {
 				con.writeBuffer = buffer;
@@ -179,10 +190,14 @@ public class NIOSocketWR extends SocketWR {
 	public void asynRead() throws IOException {
 		ByteBuffer theBuffer = con.readBuffer;
 		if (theBuffer == null) {
-			theBuffer = con.processor.getBufferPool().allocate();
+
+			theBuffer = con.processor.getBufferPool().allocate(con.processor.getBufferPool().getChunkSize());
+
 			con.readBuffer = theBuffer;
 		}
+
 		int got = channel.read(theBuffer);
+
 		con.onReadData(got);
 	}
 

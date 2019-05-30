@@ -50,12 +50,16 @@ public final class RouteResultsetNode implements Serializable , Comparable<Route
 	private int totalNodeSize =0; //方便后续jdbc批量获取扩展
    private Procedure procedure;
 	private LoadData loadData;
+	private RouteResultset source;
 	
 	// 强制走 master，可以通过 RouteResultset的属性canRunInReadDB(false)
 	// 传给 RouteResultsetNode 来实现，但是 强制走 slave需要增加一个属性来实现:
 	private Boolean runOnSlave = null;	// 默认null表示不施加影响, true走slave,false走master
 	
 	private String subTableName; // 分表的表名
+
+	//迁移算法用     -2代表不是slot分片  ，-1代表扫描所有分片
+	private int slot=-2;
 	
 	public RouteResultsetNode(String name, int sqlType, String srcStatement) {
 		this.name = name;
@@ -72,7 +76,13 @@ public final class RouteResultsetNode implements Serializable , Comparable<Route
 	public Boolean getRunOnSlave() {
 		return runOnSlave;
 	}
-
+	public String getRunOnSlaveDebugInfo() {
+		return runOnSlave == null?" default ":Boolean.toString(runOnSlave);
+	}
+	public boolean isUpdateSql() {
+		int type=sqlType;
+		return ServerParse.INSERT==type||ServerParse.UPDATE==type||ServerParse.DELETE==type||ServerParse.DDL==type;
+	}
 	public void setRunOnSlave(Boolean runOnSlave) {
 		this.runOnSlave = runOnSlave;
 	}
@@ -128,7 +138,15 @@ public final class RouteResultsetNode implements Serializable , Comparable<Route
         return procedure;
     }
 
-    public void setProcedure(Procedure procedure)
+	public int getSlot() {
+		return slot;
+	}
+
+	public void setSlot(int slot) {
+		this.slot = slot;
+	}
+
+	public void setProcedure(Procedure procedure)
     {
         this.procedure = procedure;
     }
@@ -201,8 +219,9 @@ public final class RouteResultsetNode implements Serializable , Comparable<Route
 
 	@Override
 	public boolean equals(Object obj) {
-		if (this == obj)
+		if (this == obj) {
 			return true;
+		}
 		if (obj instanceof RouteResultsetNode) {
 			RouteResultsetNode rrn = (RouteResultsetNode) obj;
 			if(subTableName!=null){
@@ -276,5 +295,13 @@ public final class RouteResultsetNode implements Serializable , Comparable<Route
 	
 	public boolean isHasBlanceFlag() {
 		return hasBlanceFlag;
+	}
+
+	public RouteResultset getSource() {
+		return source;
+	}
+
+	public void setSource(RouteResultset source) {
+		this.source = source;
 	}
 }

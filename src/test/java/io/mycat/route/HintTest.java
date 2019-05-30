@@ -6,6 +6,7 @@ import junit.framework.Assert;
 
 import org.junit.Test;
 
+import io.mycat.MycatServer;
 import io.mycat.SimpleCachePool;
 import io.mycat.cache.CacheService;
 import io.mycat.cache.LayerCachePool;
@@ -22,13 +23,16 @@ import io.mycat.server.parser.ServerParse;
 public class HintTest {
 	protected Map<String, SchemaConfig> schemaMap;
 	protected LayerCachePool cachePool = new SimpleCachePool();
-	protected RouteStrategy routeStrategy = RouteStrategyFactory.getRouteStrategy("fdbparser");
+	protected RouteStrategy routeStrategy;
 
 	public HintTest() {
 		String schemaFile = "/route/schema.xml";
 		String ruleFile = "/route/rule.xml";
 		SchemaLoader schemaLoader = new XMLSchemaLoader(schemaFile, ruleFile);
 		schemaMap = schemaLoader.getSchemas();
+		MycatServer.getInstance().getConfig().getSchemas().putAll(schemaMap);
+        RouteStrategyFactory.init();
+        routeStrategy = RouteStrategyFactory.getRouteStrategy("fdbparser");
 	}
 	/**
      * 测试注解

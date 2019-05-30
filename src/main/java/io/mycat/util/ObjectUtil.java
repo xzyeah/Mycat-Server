@@ -54,16 +54,18 @@ public final class ObjectUtil {
         {
             clazz = Class.forName(className);
            Field field = clazz.getField(fieldName);
-             if(field!=null)return field.get(null);
+             if(field!=null) {
+                 return field.get(null);
+             }
         } catch (ClassNotFoundException e)
         {
-            LOGGER.error("getStaticFieldValue", e);
+            //LOGGER.error("getStaticFieldValue", e);
         } catch (NoSuchFieldException e)
         {
-            LOGGER.error("getStaticFieldValue", e);
+           // LOGGER.error("getStaticFieldValue", e);
         } catch (IllegalAccessException e)
         {
-            LOGGER.error("getStaticFieldValue", e);
+          //  LOGGER.error("getStaticFieldValue", e);
         }
         return null;
     }
@@ -78,11 +80,11 @@ public final class ObjectUtil {
 			ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(b.toByteArray()));
 			return ois.readObject();
 		} catch (IOException e) {
-		    LOGGER.error("copyObjectIOError", e);
+            throw new RuntimeException(e);
 		} catch (ClassNotFoundException e) {
-		    LOGGER.error("copyObjectError", e);
+            throw new RuntimeException(e);
 		}
-		return null;
+
 	}
 	
     /**
@@ -274,8 +276,8 @@ public final class ObjectUtil {
                         .indexOf(propertyDescriptor));
                 if (pd.getDisplayName().equals(
                         propertyDescriptor.getDisplayName())
-                        && !pd.getDisplayName().equals("class")) {
-                    if(propertyDescriptor.getWriteMethod() != null)
+                        && !pd.getDisplayName().equals("class")
+                        && propertyDescriptor.getWriteMethod() != null) {
                         propertyDescriptor.getWriteMethod().invoke(toObj, pd.getReadMethod().invoke(fromObj, null));
                 }
 

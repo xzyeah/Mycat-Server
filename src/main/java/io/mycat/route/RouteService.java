@@ -26,10 +26,12 @@ package io.mycat.route;
 import java.sql.SQLNonTransientException;
 import java.sql.SQLSyntaxErrorException;
 import java.util.HashMap;
-import java.util.Locale;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentMap;
 
-import org.slf4j.Logger; import org.slf4j.LoggerFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import io.mycat.cache.CachePool;
 import io.mycat.cache.CacheService;
@@ -37,6 +39,7 @@ import io.mycat.cache.LayerCachePool;
 import io.mycat.config.model.SchemaConfig;
 import io.mycat.config.model.SystemConfig;
 import io.mycat.route.factory.RouteStrategyFactory;
+import io.mycat.route.function.PartitionByCRC32PreSlot;
 import io.mycat.route.handler.HintHandler;
 import io.mycat.route.handler.HintHandlerFactory;
 import io.mycat.route.handler.HintSQLHandler;
@@ -77,6 +80,7 @@ public class RouteService {
 			cacheKey = schema.getName() + stmt;			
 			rrs = (RouteResultset) sqlRouteCache.get(cacheKey);
 			if (rrs != null) {
+				checkMigrateRule(schema.getName(),rrs,sqlType);
 				return rrs;
 			}
 		}
@@ -100,8 +104,8 @@ public class RouteService {
                 	String hintType = (String) hintMap.get(MYCAT_HINT_TYPE);
                     String hintSql = (String) hintMap.get(hintType);
                     if( hintSql.length() == 0 ) {
-                    	LOGGER.warn("comment int sql must meet :/*!mycat:type=value*/ or /*#mycat:type=value*/: "+stmt);
-                    	throw new SQLSyntaxErrorException("comment int sql must meet :/*!mycat:type=value*/ or /*#mycat:type=value*/: "+stmt);
+                    	LOGGER.warn("comment int sql must meet :/*!mycat:type=value*/ or /*#mycat:type=value*/ or /*mycat:type=value*/: "+stmt);
+                    	throw new SQLSyntaxErrorException("comment int sql must meet :/*!mycat:type=value*/ or /*#mycat:type=value*/ or /*mycat:type=value*/: "+stmt);
                     }
                     String realSQL = stmt.substring(endPos + "*/".length()).trim();
 
@@ -125,8 +129,8 @@ public class RouteService {
                     }
                     
                 }else{//fixed by runfriends@126.com
-                	LOGGER.warn("comment in sql must meet :/*!mycat:type=value*/ or /*#mycat:type=value*/: "+stmt);
-                	throw new SQLSyntaxErrorException("comment in sql must meet :/*!mcat:type=value*/ or /*#mycat:type=value*/: "+stmt);
+                	LOGGER.warn("comment in sql must meet :/*!mycat:type=value*/ or /*#mycat:type=value*/ or /*mycat:type=value*/: "+stmt);
+                	throw new SQLSyntaxErrorException("comment in sql must meet :/*!mcat:type=value*/ or /*#mycat:type=value*/ or /*mycat:type=value*/: "+stmt);
                 }
 			}
 		} else {
@@ -138,7 +142,42 @@ public class RouteService {
 		if (rrs != null && sqlType == ServerParse.SELECT && rrs.isCacheAble()) {
 			sqlRouteCache.putIfAbsent(cacheKey, rrs);
 		}
+		checkMigrateRule(schema.getName(),rrs,sqlType);
 		return rrs;
+	}
+
+	 //数据迁移的切换准备阶段，需要拒绝写操作和所有的跨多节点写操作
+		private   void checkMigrateRule(String schemal,RouteResultset rrs,int sqlType ) throws SQLNonTransientException {
+		if(rrs!=null&&rrs.getTables()!=null){
+			boolean isUpdate=isUpdateSql(sqlType);
+			if(!isUpdate)return;
+			ConcurrentMap<String,List<PartitionByCRC32PreSlot.Range>> tableRules= RouteCheckRule.migrateRuleMap.get(schemal.toUpperCase()) ;
+			if(tableRules!=null){
+			for (String table : rrs.getTables()) {
+				List<PartitionByCRC32PreSlot.Range> rangeList= tableRules.get(table.toUpperCase()) ;
+				if(rangeList!=null&&!rangeList.isEmpty()){
+					if(rrs.getNodes().length>1&&isUpdate){
+						throw new   SQLNonTransientException ("schema:"+schemal+",table:"+table+",sql:"+rrs.getStatement()+" is not allowed,because table is migrate switching,please wait for a moment");
+					}
+					for (PartitionByCRC32PreSlot.Range range : rangeList) {
+						RouteResultsetNode[] routeResultsetNodes=	rrs.getNodes();
+						for (RouteResultsetNode routeResultsetNode : routeResultsetNodes) {
+							int slot=routeResultsetNode.getSlot();
+							if(isUpdate&&slot>=range.start&&slot<=range.end){
+								throw new   SQLNonTransientException ("schema:"+schemal+",table:"+table+",sql:"+rrs.getStatement()+" is not allowed,because table is migrate switching,please wait for a moment");
+
+							}
+						}
+					}
+				}
+			}
+			}
+		}
+	}
+
+
+	private boolean isUpdateSql(int type) {
+		return ServerParse.INSERT==type||ServerParse.UPDATE==type||ServerParse.DELETE==type||ServerParse.DDL==type;
 	}
 
 	public static int isHintSql(String sql){
@@ -150,11 +189,20 @@ public class RouteService {
 			while(j < len && c != '!' && c != '#' && (c == ' ' || c == '*')){
 				c = sql.charAt(++j);
 			}
-			if(j + 6 >= len)	// prevent the following sql.charAt overflow
-				return -1;		// false
+			//注解支持的'!'不被mysql单库兼容，
+			//注解支持的'#'不被mybatis兼容
+			//注解支持的':'不被hibernate兼容
+			//考虑用mycat字符前缀标志Hintsql:"/** mycat: */"
+			if(sql.charAt(j)=='m'){
+				j--;
+			}
+			if(j + 6 >= len)	{// prevent the following sql.charAt overflow
+				return -1;        // false
+			}
 			if(sql.charAt(++j) == 'm' && sql.charAt(++j) == 'y' && sql.charAt(++j) == 'c'
-				&& sql.charAt(++j) == 'a' && sql.charAt(++j) == 't' && sql.charAt(++j) == ':')
-				return j+1;	// true，同时返回注解部分的长度
+				&& sql.charAt(++j) == 'a' && sql.charAt(++j) == 't' && (sql.charAt(++j) == ':' || sql.charAt(j) == '#')) {
+				return j + 1;    // true，同时返回注解部分的长度
+			}
 		}
 		return -1;	// false
 	}

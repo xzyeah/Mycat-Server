@@ -8,11 +8,13 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
 
+import org.junit.Before;
 import org.junit.Test;
 
 import com.alibaba.druid.sql.ast.SQLStatement;
 import com.alibaba.druid.sql.dialect.mysql.parser.MySqlStatementParser;
 
+import io.mycat.MycatServer;
 import io.mycat.SimpleCachePool;
 import io.mycat.cache.LayerCachePool;
 import io.mycat.config.loader.SchemaLoader;
@@ -30,18 +32,22 @@ import junit.framework.TestCase;
 public class DruidMysqlRouteStrategyTest extends TestCase {
     protected Map<String, SchemaConfig> schemaMap;
     protected LayerCachePool cachePool = new SimpleCachePool();
-    protected RouteStrategy routeStrategy = RouteStrategyFactory.getRouteStrategy("druidparser");
+    protected RouteStrategy routeStrategy ;
 
     public DruidMysqlRouteStrategyTest() {
         String schemaFile = "/route/schema.xml";
         String ruleFile = "/route/rule.xml";
         SchemaLoader schemaLoader = new XMLSchemaLoader(schemaFile, ruleFile);
         schemaMap = schemaLoader.getSchemas();
+        MycatServer.getInstance().getConfig().getSchemas().putAll(schemaMap);
+        RouteStrategyFactory.init();
+        routeStrategy = RouteStrategyFactory.getRouteStrategy("druidparser");
     }
 
     protected void setUp() throws Exception {
         // super.setUp();
         // schemaMap = CobarServer.getInstance().getConfig().getSchemas();
+
     }
 
 //	public void testAlias() throws Exception {
@@ -50,6 +56,7 @@ public class DruidMysqlRouteStrategyTest extends TestCase {
 //		RouteResultset rrs = routeStrategy.route(new SystemConfig(),schema, -1, sql, null,
 //				null, cachePool);
 //	}
+
 
     public void testRouteInsertShort() throws Exception {
         String sql = "inSErt into offer_detail (`offer_id`, gmt) values (123,now())";
@@ -165,7 +172,7 @@ public class DruidMysqlRouteStrategyTest extends TestCase {
         schema = schemaMap.get("TESTDB");
         rrs = routeStrategy.route(new SystemConfig(), schema, -1, sql, null, null, cachePool);
         Assert.assertEquals(1, rrs.getNodes().length);
-        Assert.assertEquals(true, rrs.isCacheAble());
+        Assert.assertEquals(false, rrs.isCacheAble());   // 全局表涉及到多个节点时,不缓存路由结果
 
     }
 
@@ -335,7 +342,6 @@ public class DruidMysqlRouteStrategyTest extends TestCase {
         SchemaConfig schema = schemaMap.get("cndb");
 
         String sql = "select * from independent where member='abc'";
-
         RouteResultset rrs = routeStrategy.route(new SystemConfig(), schema, 1, sql, null, null,
                 cachePool);
         Assert.assertEquals(true, rrs.isCacheAble());
@@ -399,7 +405,7 @@ public class DruidMysqlRouteStrategyTest extends TestCase {
         }
         Assert.assertEquals(
                 true,
-                err.startsWith("parent relation column can't be updated ORDERS->CUSTOMER_ID"));
+                err.startsWith("Parent relevant column can't be updated ORDERS->CUSTOMER_ID"));
 
         // route by parent rule ,update sql
         sql = "update orders set id=1 ,name='aaa' where customer_id=2000001";
@@ -931,7 +937,7 @@ public class DruidMysqlRouteStrategyTest extends TestCase {
         Assert.assertEquals(1, rrs.getNodes().length);
         Assert.assertEquals("dn1", rrs.getNodes()[0].getName());
 
-        //insert ... on duplicate key ,partion key can't be updated
+        //insert ... on duplicate key ,sharding key can't be updated
         sql = "insert into employee (id,name,sharding_id) values(1,'testonly',10000) " +
                 "on duplicate key update name=VALUES(name),id = VALUES(id),sharding_id = VALUES(sharding_id)";
 
@@ -939,7 +945,7 @@ public class DruidMysqlRouteStrategyTest extends TestCase {
             rrs = routeStrategy.route(new SystemConfig(), schema,
                     ServerParse.SELECT, sql, null, null, cachePool);
         } catch (Exception e) {
-            Assert.assertEquals("partion key can't be updated: EMPLOYEE -> SHARDING_ID", e.getMessage());
+            Assert.assertEquals("Sharding column can't be updated: EMPLOYEE -> SHARDING_ID", e.getMessage());
         }
 
 

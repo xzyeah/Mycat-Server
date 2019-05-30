@@ -25,6 +25,8 @@ package io.mycat.backend.mysql.nio.handler;
 
 import java.util.List;
 
+import io.mycat.backend.mysql.xa.TxState;
+import io.mycat.config.ErrorCode;
 import org.slf4j.Logger; import org.slf4j.LoggerFactory;
 
 import io.mycat.backend.BackendConnection;
@@ -47,12 +49,19 @@ public class CommitNodeHandler implements ResponseHandler {
 
 	public void commit(BackendConnection conn) {
 		conn.setResponseHandler(CommitNodeHandler.this);
+		boolean isClosed=conn.isClosedOrQuit();
+		if(isClosed)
+		{
+			session.getSource().writeErrMessage(ErrorCode.ER_UNKNOWN_ERROR,
+					"receive commit,but find backend con is closed or quit");
+			LOGGER.error( conn+"receive commit,but fond backend con is closed or quit");
+		}
 	   if(conn instanceof MySQLConnection)
 	   {
 		   MySQLConnection mysqlCon = (MySQLConnection) conn;
 		   if (mysqlCon.getXaStatus() == 1)
 		   {
-			   String xaTxId = session.getXaTXID();
+			   String xaTxId = session.getXaTXID()+",'"+mysqlCon.getSchema()+"'";
 			   String[] cmds = new String[]{"XA END " + xaTxId,
 					   "XA PREPARE " + xaTxId};
 			   mysqlCon.execBatchCmd(cmds);
@@ -79,21 +88,35 @@ public class CommitNodeHandler implements ResponseHandler {
 			MySQLConnection mysqlCon = (MySQLConnection) conn;
 			switch (mysqlCon.getXaStatus())
 			{
-				case 1:
+				case TxState.TX_STARTED_STATE:
 					if (mysqlCon.batchCmdFinished())
 					{
-						String xaTxId = session.getXaTXID();
+						String xaTxId = session.getXaTXID()+",'"+mysqlCon.getSchema()+"'";
 						mysqlCon.execCmd("XA COMMIT " + xaTxId);
-						mysqlCon.setXaStatus(2);
+						mysqlCon.setXaStatus(TxState.TX_PREPARED_STATE);
 					}
 					return;
-				case 2:
+				case TxState.TX_PREPARED_STATE:
 				{
-					mysqlCon.setXaStatus(0);
+					mysqlCon.setXaStatus(TxState.TX_INITIALIZE_STATE);
 					break;
+				}
+				default:
+				//	LOGGER.error("Wrong XA status flag!");
+			}
+			
+			/* 1.  事务提交后,xa 事务结束     */
+			if(TxState.TX_INITIALIZE_STATE==mysqlCon.getXaStatus()){
+				if(session.getXaTXID()!=null){
+					session.setXATXEnabled(false);
 				}
 			}
 		}
+		
+		/* 2. preAcStates 为true,事务结束后,需要设置为true。preAcStates 为ac上一个状态    */
+        if(session.getSource().isPreAcStates()&&!session.getSource().isAutocommit()){
+        	session.getSource().setAutocommit(true);
+        }
 		session.clearResources(false);
 		ServerConnection source = session.getSource();
 		source.write(ok);

@@ -26,10 +26,13 @@ package io.mycat.route.function;
 import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.util.HashSet;
 import java.util.LinkedList;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 import io.mycat.config.model.rule.RuleAlgorithm;
+import io.mycat.route.function.PartitionByPrefixPattern.LongRange;
 
 /**
  * auto partition by Long
@@ -67,7 +70,7 @@ public class PartitionByPattern extends AbstractPartitionAlgorithm implements Ru
 		if (!isNumeric(columnValue)) {
 			return defaultNode;
 		}
-		long value = Long.valueOf(columnValue);
+		long value = Long.parseLong(columnValue);
 		Integer rst = null;
 		for (LongRange longRang : this.longRongs) {
 			long hash = value % patternValue;
@@ -76,6 +79,20 @@ public class PartitionByPattern extends AbstractPartitionAlgorithm implements Ru
 			}
 		}
 		return rst;
+	}
+	
+	@Override
+	public int getPartitionNum() {
+//		int nPartition = this.longRongs.length;
+		/*
+		 * fix #1284 这里的统计应该统计Range的nodeIndex的distinct总数
+		 */
+		Set<Integer> distNodeIdxSet = new HashSet<Integer>();
+		for(LongRange range : longRongs) {
+			distNodeIdxSet.add(range.nodeIndx);
+		}
+		int nPartition = distNodeIdxSet.size();
+		return nPartition;
 	}
 
 	public static boolean isNumeric(String str) {
@@ -97,15 +114,15 @@ public class PartitionByPattern extends AbstractPartitionAlgorithm implements Ru
 
 			for (String line = null; (line = in.readLine()) != null;) {
 				line = line.trim();
-				if (line.startsWith("#") || line.startsWith("//"))
+				if (line.startsWith("#") || line.startsWith("//")) {
 					continue;
+				}
 				int ind = line.indexOf('=');
 				if (ind < 0) {
 					System.out.println(" warn: bad line int " + mapFile + " :"
 							+ line);
 					continue;
 				}
-				try {
 					String pairs[] = line.substring(0, ind).trim().split("-");
 					long longStart = Long.parseLong(pairs[0].trim());
 					long longEnd = Long.parseLong(pairs[1].trim());
@@ -114,8 +131,6 @@ public class PartitionByPattern extends AbstractPartitionAlgorithm implements Ru
 					longRangeList
 							.add(new LongRange(nodeId, longStart, longEnd));
 
-				} catch (Exception e) {
-				}
 			}
 			longRongs = longRangeList.toArray(new LongRange[longRangeList
 					.size()]);

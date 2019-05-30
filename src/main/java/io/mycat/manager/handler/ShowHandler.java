@@ -25,7 +25,9 @@ package io.mycat.manager.handler;
 
 import io.mycat.config.ErrorCode;
 import io.mycat.manager.ManagerConnection;
+import io.mycat.manager.response.CheckGlobalTable;
 import io.mycat.manager.response.ShowBackend;
+import io.mycat.manager.response.ShowBackendOld;
 import io.mycat.manager.response.ShowCollation;
 import io.mycat.manager.response.ShowCommand;
 import io.mycat.manager.response.ShowConnection;
@@ -47,11 +49,13 @@ import io.mycat.manager.response.ShowSQLCondition;
 import io.mycat.manager.response.ShowSQLDetail;
 import io.mycat.manager.response.ShowSQLExecute;
 import io.mycat.manager.response.ShowSQLHigh;
+import io.mycat.manager.response.ShowSQLLarge;
 import io.mycat.manager.response.ShowSQLSlow;
 import io.mycat.manager.response.ShowSQLSumTable;
 import io.mycat.manager.response.ShowSQLSumUser;
 import io.mycat.manager.response.ShowServer;
 import io.mycat.manager.response.ShowSession;
+import io.mycat.manager.response.ShowSqlResultSet;
 import io.mycat.manager.response.ShowSysLog;
 import io.mycat.manager.response.ShowSysParam;
 import io.mycat.manager.response.ShowThreadPool;
@@ -59,6 +63,7 @@ import io.mycat.manager.response.ShowTime;
 import io.mycat.manager.response.ShowVariables;
 import io.mycat.manager.response.ShowVersion;
 import io.mycat.manager.response.ShowWhiteHost;
+import io.mycat.manager.response.ShowDirectMemory;
 import io.mycat.route.parser.ManagerParseShow;
 import io.mycat.route.parser.util.ParseUtil;
 import io.mycat.server.handler.ShowCache;
@@ -90,6 +95,9 @@ public final class ShowHandler {
 			break;
 		case ManagerParseShow.BACKEND:
 			ShowBackend.execute(c);
+			break;
+		case ManagerParseShow.BACKEND_OLD:
+			ShowBackendOld.execute(c);
 			break;
 		case ManagerParseShow.CONNECTION_SQL:
 			ShowConnectionSQL.execute(c);
@@ -163,9 +171,16 @@ public final class ShowHandler {
 			boolean isClearHigh = Boolean.valueOf( stmt.substring(rs >>> 8).trim() );
 			ShowSQLHigh.execute(c, isClearHigh);
 			break;
+		case ManagerParseShow.SQL_LARGE:
+			boolean isClearLarge = Boolean.valueOf( stmt.substring(rs >>> 8).trim() );
+			ShowSQLLarge.execute(c, isClearLarge);
+			break;
 		case ManagerParseShow.SQL_CONDITION:
 			ShowSQLCondition.execute(c);
-			break;			
+			break;
+		case ManagerParseShow.SQL_RESULTSET:
+			ShowSqlResultSet.execute(c);
+			break;	
 		case ManagerParseShow.SQL_SUM_USER:
 			boolean isClearSum = Boolean.valueOf( stmt.substring(rs >>> 8).trim() );
 			ShowSQLSumUser.execute(c,isClearSum);
@@ -227,6 +242,15 @@ public final class ShowHandler {
 		case ManagerParseShow.DATASOURCE_CLUSTER://by songwie
 			ShowDatasourceCluster.response(c,stmt);
 			break;	
+		case ManagerParseShow.DIRECTMEMORY_DETAILl:
+			ShowDirectMemory.execute(c,2);
+			break;
+		case ManagerParseShow.DIRECTMEMORY_TOTAL:
+			ShowDirectMemory.execute(c,1);
+			break;
+		case ManagerParseShow.CHECK_GLOBAL:
+			CheckGlobalTable.execute(c, stmt);
+			break;
 		default:
 			c.writeErrMessage(ErrorCode.ER_YES, "Unsupported statement");
 		}

@@ -31,6 +31,8 @@ public class CommandCount {
     private long initDB;
     private long query;
     private long stmtPrepare;
+    private long stmtSendLongData;
+    private long stmtReset;
     private long stmtExecute;
     private long stmtClose;
     private long ping;
@@ -38,7 +40,9 @@ public class CommandCount {
     private long quit;
     private long heartbeat;
     private long other;
+    public CommandCount(){
 
+    }
     public void doInitDB() {
         ++initDB;
     }
@@ -61,6 +65,22 @@ public class CommandCount {
 
     public long stmtPrepareCount() {
         return stmtPrepare;
+    }
+    
+    public void doStmtSendLongData() {
+    	++stmtSendLongData;
+    }
+    
+    public long stmtSendLongDataCount() {
+    	return stmtSendLongData;
+    }
+    
+    public void doStmtReset() {
+    	++stmtReset;
+    }
+    
+    public long stmtResetCount() {
+    	return stmtReset;
     }
 
     public void doStmtExecute() {

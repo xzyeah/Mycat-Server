@@ -6,6 +6,7 @@ import java.util.Map;
 
 import org.junit.Test;
 
+import io.mycat.MycatServer;
 import io.mycat.SimpleCachePool;
 import io.mycat.cache.CacheService;
 import io.mycat.cache.LayerCachePool;
@@ -25,14 +26,19 @@ import junit.framework.Assert;
 public class DDLRouteTest {
 	protected Map<String, SchemaConfig> schemaMap;
 	protected LayerCachePool cachePool = new SimpleCachePool();
-	protected RouteStrategy routeStrategy = RouteStrategyFactory.getRouteStrategy("druidparser");
+	protected RouteStrategy routeStrategy ;
 
 	public DDLRouteTest() {
 		String schemaFile = "/route/schema.xml";
 		String ruleFile = "/route/rule.xml";
 		SchemaLoader schemaLoader = new XMLSchemaLoader(schemaFile, ruleFile);
 		schemaMap = schemaLoader.getSchemas();
+		MycatServer.getInstance().getConfig().getSchemas().putAll(schemaMap);
+		MycatServer.getInstance().getConfig().getSystem().setUseGlobleTableCheck(0); //DDL Route Test  不开启全局表一致性检查
+        RouteStrategyFactory.init();
+        routeStrategy = RouteStrategyFactory.getRouteStrategy("druidparser");
 	}
+
 	
 	 @Test
 	 public void testSpecialCharDDL() throws Exception {
@@ -40,8 +46,8 @@ public class DDLRouteTest {
 			CacheService cacheService = new CacheService();
 	        RouteService routerService = new RouteService(cacheService);
 	        
-	        // drop table test
-	        String  sql = " ALTER TABLE COMPANY\r\nADD COLUMN TEST  VARCHAR(255) NULL AFTER CREATE_DATE,\r\nDEFAULT CHARACTER SET DEFAULT";
+	        // alter table test
+	        String  sql = " ALTER TABLE COMPANY\r\nADD COLUMN TEST  VARCHAR(255) NULL AFTER CREATE_DATE,\r\n CHARACTER SET = UTF8";
 	        sql = RouterUtil.getFixedSql(sql);
 	        List<String> dataNodes = new ArrayList<>();
 	        String  tablename =  RouterUtil.getTableName(sql, RouterUtil.getAlterTablePos(sql, 0));

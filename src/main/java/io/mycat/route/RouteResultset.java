@@ -24,19 +24,13 @@
 package io.mycat.route;
 
 import com.alibaba.druid.sql.ast.SQLStatement;
-
-import io.mycat.MycatServer;
-import io.mycat.config.MycatConfig;
 import io.mycat.config.model.SchemaConfig;
 import io.mycat.route.parser.util.PageSQLUtil;
 import io.mycat.sqlengine.mpp.HavingCols;
 import io.mycat.util.FormatUtil;
 
 import java.io.Serializable;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 /**
  * @author mycat
@@ -77,11 +71,46 @@ public final class RouteResultset implements Serializable {
     // 强制走 master，可以通过 RouteResultset的属性canRunInReadDB=false
     // 传给 RouteResultsetNode 来实现，但是 强制走 slave需要增加一个属性来实现:
     private Boolean runOnSlave = null;	// 默认null表示不施加影响
-    
+
+       //key=dataNode    value=slot
+    private Map<String,Integer>   dataNodeSlotMap=new HashMap<>();
+
+    private boolean selectForUpdate;
+    private boolean autoIncrement;
+
+    public boolean isSelectForUpdate() {
+        return selectForUpdate;
+    }
+
+    public void setSelectForUpdate(boolean selectForUpdate) {
+        this.selectForUpdate = selectForUpdate;
+    }
+	
+	
+	 private List<String> tables;
+
+    public List<String> getTables() {
+        return tables;
+    }
+
+    public void setTables(List<String> tables) {
+        this.tables = tables;
+    }
+
+    public Map<String, Integer> getDataNodeSlotMap() {
+        return dataNodeSlotMap;
+    }
+
+    public void setDataNodeSlotMap(Map<String, Integer> dataNodeSlotMap) {
+        this.dataNodeSlotMap = dataNodeSlotMap;
+    }
+
     public Boolean getRunOnSlave() {
 		return runOnSlave;
 	}
-
+    public String getRunOnSlaveDebugInfo() {
+        return runOnSlave == null?"default":Boolean.toString(runOnSlave);
+    }
 	public void setRunOnSlave(Boolean runOnSlave) {
 		this.runOnSlave = runOnSlave;
 	}
@@ -317,7 +346,7 @@ public final class RouteResultset implements Serializable {
             for (RouteResultsetNode node : nodes)
             {
                 String dbType = dataNodeDbTypeMap.get(node.getName());
-                if (sourceDbType.equalsIgnoreCase("mysql"))
+                if (dbType.equalsIgnoreCase("mysql")) 
                 {
                     node.setStatement(sql);   //mysql之前已经加好limit
                 } else if (sqlMapCache.containsKey(dbType))
@@ -411,4 +440,11 @@ public final class RouteResultset implements Serializable {
         return s.toString();
     }
 
+    public void setAutoIncrement(boolean b) {
+        autoIncrement = b;
+    }
+
+    public boolean getAutoIncrement() {
+        return autoIncrement;
+    }
 }
